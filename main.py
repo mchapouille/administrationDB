@@ -206,8 +206,39 @@ def createEmail(name,lastname):
         new_email = name+"."+lastname+"@mercadolibre.com"
         return new_email
 
-# Envio email
-def sendEmail(owner_name,owner_lastname,manager_email,manager_state,name_db,confidentiality,integrity,availability,final_classification):
+#Envio email dando aviso al Owner de la BD refiriendo que no existe un manager asociado.
+def sendEmailInfo(name_db,name_ok,lastname_ok,email):
+
+    connection = sqlite3.connect("administration_db")
+    cursor = connection.cursor()
+    email = 'chapouillemartin@gmail.com'
+    SERVER = "smtp.gmail.com"
+    PORT = 587
+    FROM = "meli.challenge.databases@gmail.com"
+    PASSWORD = "verdad8756"
+    TO = [email]
+    SUBJECT = "Seguridad Informatica : Base de Datos sin Manager"
+    MESSAGE_TEXT = ("Estimado/a %s %s,\n\nHemos evidenciado que la Base de Datos %s no tiene un Manager asociado. Como responsable de la misma, le solicitamos por favor se comunique con el sector para asignar uno.\n\nAgradecemos su colaboracion."% (str(name_ok),str(lastname_ok),str(name_db.upper())))
+
+
+    try:
+
+
+        server = smtplib.SMTP(SERVER,PORT)
+        server.starttls()
+        server.login(FROM,PASSWORD)
+        message = """From: %s\nTo: %s\nSubject: %s\n\n%s""" % (FROM, ", ".join(TO), SUBJECT, MESSAGE_TEXT)
+        server.sendmail(FROM,TO,message)
+        server.quit()
+        messagebox.showinfo("EMAIL","Se envio el email al Owner %s correctamente"%name_ok)
+
+
+    except:
+
+        messagebox.showerror("EMAIL","Fallo al enviar el email")
+
+# Envio email de clasificacion al Manager
+def sendEmailClassification(owner_name,owner_lastname,manager_email,manager_state,name_db,confidentiality,integrity,availability,final_classification):
 
     connection = sqlite3.connect("administration_db")
     cursor = connection.cursor()
@@ -221,7 +252,7 @@ def sendEmail(owner_name,owner_lastname,manager_email,manager_state,name_db,conf
         PASSWORD = "verdad8756"
         TO = [manager_email]
         SUBJECT = "Seguridad Informatica : Revalida automatica de Base de Datos"
-        MESSAGE_TEXT = ("Estimado/a %s,\n\nNos encontramos realizando el proceso anual de reclasificacion de Base de Datos. En ese sentido, te pedimos por favor nos envies tu conformidad en caso de estar de acuerdo con los datos brindados a continuacion :\
+        MESSAGE_TEXT = ("Estimado/a %s,\n\nNos encontramos realizando el proceso anual de reclasificacion de Base de Datos. En ese sentido, te pedimos por favor que en caso de estar de acuerdo con los datos brindados a continuacion, nos envies tu conformidad :\
                          \n\n\nBase de datos : %s \
                          \nIntegridad : %s\
                          \nConfidencialidad : %s\
@@ -377,30 +408,35 @@ def searchCriticalDB():
         result_set = cursor.fetchall()
         connection.close()
 
-        for i in result_set:
+        if result_set :
 
-            owner_name = i[1]
-            owner_lastname = i[2]
-            manager_email = i[4]
-            manager_state = i[5]
-            name_db = i[6]
-            confidentiality = i[7]
-            integrity = i[8]
-            availability = i[9]
-            final_classification = i[10]
+            for i in result_set:
 
-            message = messagebox.askquestion("EMAIL", "Desea enviar email de revalida al Manager de la Base de Datos : %s ?"%name_db.upper())
+                owner_name = i[1]
+                owner_lastname = i[2]
+                manager_email = i[4]
+                manager_state = i[5]
+                name_db = i[6]
+                confidentiality = i[7]
+                integrity = i[8]
+                availability = i[9]
+                final_classification = i[10]
 
-            if message == 'yes':
+                message = messagebox.askquestion("EMAIL", "Base critica : %s . Desea enviar email de revalida al Manager ?"%name_db.upper())
 
-                sendEmail(owner_name,owner_lastname,manager_email,manager_state,name_db,confidentiality,integrity,availability,final_classification)
+                if message == 'yes':
 
+                    sendEmailClassification(owner_name,owner_lastname,manager_email,manager_state,name_db,confidentiality,integrity,availability,final_classification)
+
+        else:
+
+            messagebox.showerror("ERROR", "No hay datos cargados")
 
     except sqlite3.OperationalError as e:
 
         messagebox.showerror("Error", "Debe conectar la Base de datos primero")
 
-    except Exception as e:
+    except :
 
         messagebox.showwarning("Send Email","No se pudo realizar la consulta a la BBDD")
 
@@ -514,38 +550,6 @@ def validateJson(db_name,name,email,username):
     else:
 
         messagebox.showwarning("BBDD","BD %s con nombre y email nulos. Complete los datos y vuelva a ingresarla"% db_name.upper())
-
-# Cargo datos de los Managers (.csv)
-def loadCsv():
-
-
-    i = 0
-
-
-    try:
-
-        with open('user_manager.csv') as csv_userManager:
-
-            csv_read = csv.reader(csv_userManager)
-
-            for manager in csv_read:
-
-                    i += 1
-                    insertManager(manager[0],manager[1],manager[2],manager[3])
-                    manager_db = Manager(manager[0],manager[1],manager[2],manager[3])
-                    managers_db_list.addManager(manager_db)
-                    name_manager = separateEmail(manager[3])
-
-            messagebox.showinfo("CSV","Se han importado correctamente %s Managers."%str(i))
-
-
-    except sqlite3.OperationalError:
-
-         messagebox.showerror("Error","Debe conectar la Base de datos primero")
-
-    except Exception as e:
-
-        messagebox.showerror("%s : Error : Los registros ya fueron cargados"%e)
 
 # Valido si hay Owners cargados
 def getOwner():
@@ -723,7 +727,13 @@ def loadJson():
                             i += 1
                     else:
 
-                        messagebox.showwarning("Atencion!","No se pudo cargar la Base  %s . Por favor valide que tenga un Manager asociado.Se envio un email a %s %s para validar la informacion"% (str(db_name.upper()),str(name_ok.upper()),str(lastname_ok.upper())))
+                        message = messagebox.askquestion("Atencion!","No se pudo cargar la Base  %s ya que no tiene un Manager asociado. Desea dar aviso al Owner de la BD : %s %s ?"% (str(db_name.upper()),str(name_ok.upper()),str(lastname_ok.upper())))
+
+                        if message == 'yes':
+
+                            sendEmailInfo(db_name,name_ok,lastname_ok,email)
+
+                        print (email)
                         errors +=1
                         i += 1
 
@@ -746,15 +756,40 @@ def loadJson():
 
             i += 1
 
+        if i > 2:
+
+            messagebox.showinfo("IMPORT FINALIZADO","Resgistros procesados %s\nBases ingresadas : %s\nBases con errores : %s"% (str(len(data['db_list'])),(len(data['db_list'])-errors),str(errors)))
+
+# Cargo datos de los Managers (.csv)
+def loadCsv():
 
 
-
-# ********************** /// ***************************************************
-
+    i = 0
 
 
-    if i > 2:
-        messagebox.showinfo("IMPORT FINALIZADO","Resgistros procesados %s\nBases ingresadas : %s\nBases con errores : %s"% (str(len(data['db_list'])),(len(data['db_list'])-errors),str(errors)))
+    try:
+
+        with open('user_manager.csv') as csv_userManager:
+
+            csv_read = csv.reader(csv_userManager)
+
+            for manager in csv_read:
+
+                    i += 1
+                    insertManager(manager[0],manager[1],manager[2],manager[3])
+                    manager_db = Manager(manager[0],manager[1],manager[2],manager[3])
+                    managers_db_list.addManager(manager_db)
+                    name_manager = separateEmail(manager[3])
+
+            messagebox.showinfo("CSV","Se han importado correctamente %s Managers."%str(i))
+
+    except sqlite3.OperationalError:
+
+         messagebox.showerror("Error","Debe conectar la Base de datos primero")
+
+    except Exception as e:
+
+        messagebox.showerror("ERROR","Los registros ya fueron cargados")
 
 
 
